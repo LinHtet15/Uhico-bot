@@ -128,6 +128,16 @@ PAYMENT_KEYWORDS = [
     "ဘယ်လိုပေးရမလဲ",
     "ဘယ်လိုလွှဲရမလဲ",
     "ဘယ်လိုလွဲရမလဲ",
+    "နံပါတ်",
+    "နံပါတ်ပေးပါ",
+    "ငွေလွှဲရမဲ့",
+    "ဘယ်ကိုပို့ရမလဲ",
+    "ဘယ်နံပါတ်",
+    "account",
+    "acc",
+    "ဖုန်းနံပါတ်",
+    "လွှဲရမယ့်",
+    "လွဲရမယ့်",
 ]
 
 ORDER_KEYWORDS = [
@@ -137,6 +147,23 @@ ORDER_KEYWORDS = [
     "ယူမယ်",
     "လိုချင်",
 ]
+
+GREETING_KEYWORDS = [
+    "hi",
+    "hello",
+    "hey",
+    "hihi",
+    "ဟိုင်း",
+    "ဟယ်လို",
+]
+
+GREETING_REPLY = """Hi! Welcome to Uhico Reseller gp 🔥
+
+💎 Diamond ဈေးနှုန်း ကြည့်ရန် - /price
+📝 Order တင်နည်း - /order
+💸 Payment info - /payment
+
+😺👀🔣@Uhico15🔣✅"""
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
@@ -213,6 +240,12 @@ async def auto_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
     text = update.message.text.lower().strip()
     
+    # Check for greeting keywords
+    for keyword in GREETING_KEYWORDS:
+        if keyword.lower() == text or keyword.lower() in text.split():
+            await update.message.reply_text(GREETING_REPLY)
+            return
+
     # Check for price keywords
     for keyword in PRICE_KEYWORDS:
         if keyword.lower() in text:
