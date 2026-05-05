@@ -87,15 +87,15 @@ ORDER_INSTRUCTIONS = """📌 Order တင်နည်း:
 
 😺👀🔣@Uhico15🔣✅"""
 
-PAYMENT_INFO = """💸PAYMENT- Kpay 🇲🇲
+PAYMENT_INFO = """💵PAYMENT- Kpay 🇲🇲
                   09442071612 
-               Daw Lwin Lwin Oo😻
+               Daw Lwin Lwin Oo
 
-💸PAYMENT-Wpay⭐
+💴PAYMENT-Wpay🇲🇲
               09789461824
              A Me Me Soe👀
 
-😺👀🔣@Uhico15🔣✅"""
+Admin- @Uhico15 🦋"""
 
 # Keywords for auto-reply
 PRICE_KEYWORDS = [
