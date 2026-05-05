@@ -2,9 +2,10 @@ import logging
 import re
 import os
 import threading
+import json
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import ForceReply, Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Enable logging
 logging.basicConfig(
@@ -14,6 +15,11 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 TOKEN = "8641878091:AAETYx4TnbbsUOe-rZf4U8fXuvHuiEFLT7s"
+ADMIN_ID = 8545074928
+
+# Order storage
+orders = []
+order_counter = 0
 
 # Dummy web server for Render health check
 class HealthHandler(BaseHTTPRequestHandler):
@@ -74,6 +80,11 @@ ORDER_INSTRUCTIONS = """📌 Order တင်နည်း:
 
 ငွေလွဲပြီး -ငွေလွဲစလစ် ၊ ယူမဲ့diaအမောက် ၊ id 🔣sever id🔣 အတူတူတွဲပို့ပေးပါ✅
 
+ဥပမာ:
+💎 86 diamonds
+🔣 ID: 123456789
+🔣 Server: 2697
+
 😺👀🔣@Uhico15🔣✅"""
 
 PAYMENT_INFO = """💸PAYMENT- Kpay 🇲🇲
@@ -119,39 +130,139 @@ PAYMENT_KEYWORDS = [
     "ဘယ်လိုလွဲရမလဲ",
 ]
 
-async def start(update: Update, context) -> None:
+ORDER_KEYWORDS = [
+    "မှာမယ်",
+    "order",
+    "မှာချင်",
+    "ယူမယ်",
+    "လိုချင်",
+]
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.message.reply_html(
         f"Hi {user.mention_html()}! Welcome to Uhico Reseller gp 🔥\n\n"
         f"💎 Diamond ဈေးနှုန်း ကြည့်ရန် - /price\n"
         f"📝 Order တင်နည်း - /order\n"
         f"💸 Payment info - /payment\n\n"
+        f"👑 Admin Commands:\n"
+        f"/orders - Pending order list ကြည့်ရန်\n"
+        f"/done [order number] - Order ပြီးကြောင်း mark လုပ်ရန်\n\n"
         f"😺👀🔣@Uhico15🔣✅",
     )
 
-async def price(update: Update, context) -> None:
+async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(PRICE_LIST)
 
-async def order(update: Update, context) -> None:
+async def order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(ORDER_INSTRUCTIONS)
 
-async def payment(update: Update, context) -> None:
+async def payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(PAYMENT_INFO)
 
-async def auto_reply(update: Update, context) -> None:
+async def view_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⚠️ Admin only command ဖြစ်ပါတယ်။")
+        return
+    
+    pending = [o for o in orders if o["status"] == "pending"]
+    if not pending:
+        await update.message.reply_text("✅ Pending order မရှိပါ။")
+        return
+    
+    msg = "📋 Pending Orders:\n\n"
+    for o in pending:
+        msg += f"🔢 Order #{o['id']}\n"
+        msg += f"👤 {o['customer_name']}\n"
+        msg += f"💬 {o['details']}\n"
+        msg += f"⏰ {o['time']}\n"
+        msg += "─────────────\n"
+    
+    msg += f"\n📊 Total pending: {len(pending)}\n"
+    msg += "✅ Order ပြီးရင် /done [number] ရိုက်ပါ"
+    await update.message.reply_text(msg)
+
+async def done_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⚠️ Admin only command ဖြစ်ပါတယ်။")
+        return
+    
+    if not context.args:
+        await update.message.reply_text("Usage: /done [order number]\nExample: /done 1")
+        return
+    
+    try:
+        order_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("⚠️ Order number ရိုက်ပါ။ Example: /done 1")
+        return
+    
+    for o in orders:
+        if o["id"] == order_id:
+            o["status"] = "done"
+            await update.message.reply_text(f"✅ Order #{order_id} ပြီးပါပြီ!")
+            return
+    
+    await update.message.reply_text(f"⚠️ Order #{order_id} မတွေ့ပါ။")
+
+async def auto_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    global order_counter
     if not update.message or not update.message.text:
         return
     text = update.message.text.lower().strip()
+    
+    # Check for price keywords
     for keyword in PRICE_KEYWORDS:
         if keyword.lower() in text:
             await update.message.reply_text(PRICE_LIST)
             return
+    
+    # Check for payment keywords
     for keyword in PAYMENT_KEYWORDS:
         if keyword.lower() in text:
             await update.message.reply_text(PAYMENT_INFO)
             return
+    
+    # Check for order keywords
+    for keyword in ORDER_KEYWORDS:
+        if keyword.lower() in text:
+            order_counter += 1
+            from datetime import datetime
+            order_data = {
+                "id": order_counter,
+                "customer_name": update.effective_user.full_name,
+                "customer_id": update.effective_user.id,
+                "details": update.message.text,
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "status": "pending"
+            }
+            orders.append(order_data)
+            
+            # Reply to customer
+            await update.message.reply_text(
+                f"✅ Order #{order_counter} received!\n\n"
+                f"ငွေလွဲစလစ်၊ ယူမဲ့ dia အမောက်၊ ID နဲ့ Server ID တွဲပို့ပေးပါ။\n"
+                f"Admin က စစ်ဆေးပြီး diamond ထည့်ပေးပါမယ်။\n\n"
+                f"😺👀🔣@Uhico15🔣✅"
+            )
+            
+            # Notify admin
+            try:
+                await context.bot.send_message(
+                    chat_id=ADMIN_ID,
+                    text=f"🔔 Order အသစ်!\n\n"
+                         f"🔢 Order #{order_counter}\n"
+                         f"👤 {update.effective_user.full_name}\n"
+                         f"💬 {update.message.text}\n\n"
+                         f"✅ ပြီးရင် /done {order_counter} ရိုက်ပါ"
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify admin: {e}")
+            return
 
-async def welcome_new_members(update: Update, context) -> None:
+async def welcome_new_members(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     for member in update.message.new_chat_members:
         await update.message.reply_text(
             f"Welcome {member.full_name} to Uhico Reseller gp 🔥!\n\n"
@@ -172,6 +283,8 @@ def main() -> None:
     application.add_handler(CommandHandler("price", price))
     application.add_handler(CommandHandler("order", order))
     application.add_handler(CommandHandler("payment", payment))
+    application.add_handler(CommandHandler("orders", view_orders))
+    application.add_handler(CommandHandler("done", done_order))
     application.add_handler(MessageHandler(filters.Regex(r"^/ဈေးနှုန်း"), price))
     application.add_handler(MessageHandler(filters.Regex(r"^/မှာမယ်"), order))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_members))
