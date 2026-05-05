@@ -1,5 +1,8 @@
 import logging
 import re
+import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import ForceReply, Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
@@ -11,6 +14,21 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 TOKEN = "8641878091:AAETYx4TnbbsUOe-rZf4U8fXuvHuiEFLT7s"
+
+# Dummy web server for Render health check
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Uhico Bot is running!")
+    def log_message(self, format, *args):
+        pass
+
+def run_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    server.serve_forever()
 
 PRICE_LIST = """📌pin‼️သတိ⚠️ငွေလွဲပြီး -ငွေလွဲစလစ် ၊ ယူမဲ့diaအမောက် ၊ id 🔣sever id🔣 အတူတူတွဲပို့ပေးပါ✅
 သတိထားပေးပါနော်✅👀
@@ -101,7 +119,6 @@ PAYMENT_KEYWORDS = [
     "ဘယ်လိုလွဲရမလဲ",
 ]
 
-
 async def start(update: Update, context) -> None:
     user = update.effective_user
     await update.message.reply_html(
@@ -112,35 +129,27 @@ async def start(update: Update, context) -> None:
         f"😺👀🔣@Uhico15🔣✅",
     )
 
-
 async def price(update: Update, context) -> None:
     await update.message.reply_text(PRICE_LIST)
-
 
 async def order(update: Update, context) -> None:
     await update.message.reply_text(ORDER_INSTRUCTIONS)
 
-
 async def payment(update: Update, context) -> None:
     await update.message.reply_text(PAYMENT_INFO)
-
 
 async def auto_reply(update: Update, context) -> None:
     if not update.message or not update.message.text:
         return
-
     text = update.message.text.lower().strip()
-
     for keyword in PRICE_KEYWORDS:
         if keyword.lower() in text:
             await update.message.reply_text(PRICE_LIST)
             return
-
     for keyword in PAYMENT_KEYWORDS:
         if keyword.lower() in text:
             await update.message.reply_text(PAYMENT_INFO)
             return
-
 
 async def welcome_new_members(update: Update, context) -> None:
     for member in update.message.new_chat_members:
@@ -152,24 +161,22 @@ async def welcome_new_members(update: Update, context) -> None:
             f"😺👀🔣@Uhico15🔣✅"
         )
 
-
 def main() -> None:
-    application = Application.builder().token(TOKEN).build()
+    # Start health check server in background
+    health_thread = threading.Thread(target=run_health_server, daemon=True)
+    health_thread.start()
+    logger.info("Health check server started")
 
+    application = Application.builder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("price", price))
     application.add_handler(CommandHandler("order", order))
     application.add_handler(CommandHandler("payment", payment))
-
     application.add_handler(MessageHandler(filters.Regex(r"^/ဈေးနှုန်း"), price))
     application.add_handler(MessageHandler(filters.Regex(r"^/မှာမယ်"), order))
-
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_members))
-
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, auto_reply))
-
     application.run_polling(allowed_updates=Update.ALL_TYPES)
-
 
 if __name__ == "__main__":
     main()
