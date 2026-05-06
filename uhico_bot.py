@@ -3,6 +3,8 @@ import re
 import os
 import threading
 import json
+import time
+import urllib.request
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import ForceReply, Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -35,6 +37,17 @@ def run_health_server():
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
     server.serve_forever()
+
+def keep_alive():
+    """Ping self every 14 minutes to prevent Render from sleeping"""
+    url = os.environ.get("RENDER_EXTERNAL_URL", "https://uhico-bot.onrender.com")
+    while True:
+        time.sleep(840)  # 14 minutes
+        try:
+            urllib.request.urlopen(url)
+            logger.info("Keep-alive ping sent")
+        except Exception as e:
+            logger.error(f"Keep-alive ping failed: {e}")
 
 PRICE_LIST = """📌pin‼️သတိ⚠️ငွေလွဲပြီး -ငွေလွဲစလစ် ၊ ယူမဲ့diaအမောက် ၊ id 🔣sever id🔣 အတူတူတွဲပို့ပေးပါ✅
 သတိထားပေးပါနော်✅👀
@@ -310,6 +323,11 @@ def main() -> None:
     health_thread = threading.Thread(target=run_health_server, daemon=True)
     health_thread.start()
     logger.info("Health check server started")
+
+    # Start keep-alive ping thread
+    keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+    keep_alive_thread.start()
+    logger.info("Keep-alive thread started")
 
     application = Application.builder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
