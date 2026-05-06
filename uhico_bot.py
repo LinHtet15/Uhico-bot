@@ -23,6 +23,10 @@ ADMIN_ID = 8545074928
 orders = []
 order_counter = 0
 
+# Mutable price and payment storage (admin can update via Telegram)
+custom_price_list = None
+custom_payment_info = None
+
 # Dummy web server for Render health check
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -202,13 +206,43 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 async def price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(PRICE_LIST)
+    await update.message.reply_text(custom_price_list or PRICE_LIST)
 
 async def order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(ORDER_INSTRUCTIONS)
 
 async def payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(PAYMENT_INFO)
+    await update.message.reply_text(custom_payment_info or PAYMENT_INFO)
+
+async def set_price(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    global custom_price_list
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⚠️ Admin only command ဖြစ်ပါတယ်။")
+        return
+    
+    if not context.args and not update.message.text.replace('/setprice', '').strip():
+        await update.message.reply_text("ဈေးစာရင်းအသစ် ရိုက်ပါ။\n\nဥပမာ:\n/setprice 💎11 ↩ 900ks\n💎22 ↩ 1800ks")
+        return
+    
+    new_price = update.message.text.replace('/setprice', '').strip()
+    custom_price_list = new_price
+    await update.message.reply_text(f"✅ ဈေးစာရင်း update ပြီးပါပြီ!\n\nအသစ်:\n{new_price}")
+
+async def set_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    global custom_payment_info
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⚠️ Admin only command ဖြစ်ပါတယ်။")
+        return
+    
+    if not context.args and not update.message.text.replace('/setpayment', '').strip():
+        await update.message.reply_text("Payment info အသစ် ရိုက်ပါ။\n\nဥပမာ:\n/setpayment Kpay 09xxxxxxx\nWpay 09xxxxxxx")
+        return
+    
+    new_payment = update.message.text.replace('/setpayment', '').strip()
+    custom_payment_info = new_payment
+    await update.message.reply_text(f"✅ Payment info update ပြီးပါပြီ!\n\nအသစ်:\n{new_payment}")
 
 async def view_orders(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
@@ -272,13 +306,13 @@ async def auto_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     # Check for price keywords
     for keyword in PRICE_KEYWORDS:
         if keyword.lower() in text:
-            await update.message.reply_text(PRICE_LIST)
+            await update.message.reply_text(custom_price_list or PRICE_LIST)
             return
     
     # Check for payment keywords
     for keyword in PAYMENT_KEYWORDS:
         if keyword.lower() in text:
-            await update.message.reply_text(PAYMENT_INFO)
+            await update.message.reply_text(custom_payment_info or PAYMENT_INFO)
             return
     
     # Check for order keywords
@@ -346,6 +380,8 @@ def main() -> None:
     application.add_handler(CommandHandler("payment", payment))
     application.add_handler(CommandHandler("orders", view_orders))
     application.add_handler(CommandHandler("done", done_order))
+    application.add_handler(CommandHandler("setprice", set_price))
+    application.add_handler(CommandHandler("setpayment", set_payment))
     application.add_handler(MessageHandler(filters.Regex(r"^/ဈေးနှုန်း"), price))
     application.add_handler(MessageHandler(filters.Regex(r"^/မှာမယ်"), order))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_members))
